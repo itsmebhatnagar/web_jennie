@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jennie - Voice Assistant (No Wake Word)</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+    }
+    .assistant-container {
+      text-align: center;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 25px;
+      padding: 40px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+    .voice-circle {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 30px;
+      cursor: pointer;
+      transition: transform 0.3s;
+    }
+    .voice-circle:hover { transform: scale(1.1); }
+    .mic-icon { width: 60px; height: 60px; fill: white; }
+    .status-text { font-size: 22px; margin-bottom: 10px; }
+    .transcript-text { font-size: 18px; opacity: 0.8; margin-bottom: 20px; }
+    .response-card { display: none; background: rgba(255, 255, 255, 0.2); border-radius: 15px; padding: 20px; }
+    .response-card.show { display: block; }
+  </style>
+</head>
+<body>
+  <div class="assistant-container">
+    <div class="voice-circle" id="voiceCircle">
+      <svg class="mic-icon" viewBox="0 0 24 24">
+        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+      </svg>
+    </div>
+    <div class="status-text" id="statusText">Listening...</div>
+    <div class="transcript-text" id="transcriptText"></div>
+    <div class="response-card" id="responseCard">
+      <div id="responseTitle"></div>
+      <div id="responseContent"></div>
+    </div>
+  </div>
+
+  <script>
+    const voiceCircle = document.getElementById('voiceCircle');
+    const statusText = document.getElementById('statusText');
+    const transcriptText = document.getElementById('transcriptText');
+    const responseCard = document.getElementById('responseCard');
+    const responseTitle = document.getElementById('responseTitle');
+    const responseContent = document.getElementById('responseContent');
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      statusText.textContent = 'Speech recognition not supported';
+      throw new Error('SpeechRecognition not supported');
+    }
+
+    let recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.continuous = true;
+
+    function speak(text) {
+      if ('speechSynthesis' in window) {
+        speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
+        speechSynthesis.speak(utterance);
+      }
+    }
+
+    function showResponse(title, content) {
+      responseTitle.textContent = title;
+      responseContent.innerHTML = content;
+      responseCard.classList.add('show');
+    }
+
+    function performTask(transcript) {
+      const lower = transcript.toLowerCase();
+      if (lower.includes('time')) {
+        const now = new Date();
+        const msg = `It's ${now.toLocaleTimeString()}`;
+        showResponse('Current Time', msg);
+        return msg;
+      }
+      if (lower.includes('joke')) {
+        const joke = 'Why did the computer show up late? It had a hard drive!';
+        showResponse('Joke', joke);
+        return joke;
+      }
+      return "I'm not sure how to help with that.";
+    }
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[event.results.length - 1][0].transcript.trim();
+      transcriptText.textContent = transcript;
+      const response = performTask(transcript);
+      speak(response);
+    };
+
+    recognition.onend = () => recognition.start();
+
+    recognition.start();
+  </script>
+</body>
+</html>
