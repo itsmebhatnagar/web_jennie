@@ -1,7 +1,7 @@
 from click import command
 import pyttsx3 #pip install pyttsx3
 import speech_recognition as sr #pip install speechRecognition
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, send_from_directory
 import datetime
 import webbrowser
 import os
@@ -132,6 +132,3 @@ if __name__ == "__main__":
 
         elif "screenshot" in query:
                 take_screenshot()
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=4985, debug=True)

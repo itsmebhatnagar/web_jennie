@@ -1,0 +1,7 @@
+Flask
+pyttsx3
+SpeechRecognition
+wikipedia
+pywhatkit
+pyautogui
+click
