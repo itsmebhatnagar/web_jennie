@@ -62,7 +62,8 @@
 
   <script>
     // === CONFIG ===
-    const BACKEND_URL = "https://YOUR_BACKEND_URL_HERE"; // <- change this!
+   const BACKEND_URL = "https://jennie-backend.onrender.com";
+
 
     const voiceCircle = document.getElementById('voiceCircle');
     const statusText = document.getElementById('statusText');
@@ -99,32 +100,53 @@
     }
 
     async function callBackend(query) {
-      try {
-        statusText.textContent = "Talking to Jennie backend...";
-        const res = await fetch(`${BACKEND_URL}/api/command`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query })
-        });
-        if (!res.ok) throw new Error("Network error");
-        const data = await res.json();
-        return data.response || "No response";
-      } catch (err) {
-        console.error(err);
-        return "Backend not reachable right now.";
-      } finally {
-        statusText.textContent = "Tap to Start Listening";
-      }
-    }
+  console.log("📡 Sending to backend:", query);
+  try {
+    statusText.textContent = "Talking to Jennie backend...";
+    const res = await fetch(`${BACKEND_URL}/api/command`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query })
+    });
+    console.log("🌐 Response status:", res.status);
+    if (!res.ok) throw new Error("Network error");
+    const data = await res.json();
+    console.log("✅ Backend JSON:", data);
+    return data.response || "No response";
+  } catch (err) {
+    console.error("❌ Fetch error:", err);
+    return "Backend not reachable right now.";
+  } finally {
+    statusText.textContent = "Tap to Start Listening";
+  }
+}
 
     recognition.onresult = async (event) => {
       const transcript = event.results[event.results.length - 1][0].transcript.trim();
       transcriptText.textContent = transcript;
       showResponse("You said:", transcript);
 
-      const backendReply = await callBackend(transcript);
-      showResponse("Jennie:", backendReply);
-      speak(backendReply);
+      const res = await fetch(`${BACKEND_URL}/api/command`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ query: transcript })
+});
+const data = await res.json();
+
+// Show and speak the response text
+showResponse("Jennie:", data.response);
+speak(data.response);
+
+// Perform the action if backend requests it
+if (data.action) {
+  if (data.action === "open_youtube") window.open("https://www.youtube.com", "_blank");
+  if (data.action === "open_google") window.open("https://www.google.com", "_blank");
+  if (data.action === "open_flipkart") window.open("https://www.flipkart.com", "_blank");
+  if (data.action === "open_amazon") window.open("https://www.amazon.in", "_blank");
+  if (data.action === "open_chatgpt") window.open("https://www.chatgpt.com", "_blank");
+  
+}
+
     };
 
     voiceCircle.onclick = () => {

@@ -3,9 +3,25 @@ from flask_cors import CORS
 import os
 import datetime
 import wikipedia
+import pytz
 
 app = Flask(__name__)
 CORS(app)
+
+@app.route("/api/wish", methods=["GET"])
+def wish_me():
+    ist = pytz.timezone("Asia/Kolkata")
+    hour = datetime.datetime.now(ist).hour
+
+    if 0 <= hour < 12:
+        wish = "Good morning! Jennie here. How can I help you today?"
+    elif 12 <= hour < 18:
+        wish = "Good afternoon! Jennie here. How can I assist you?"
+    else:
+        wish = "Good evening! Jennie here. How can I assist you tonight?"
+
+    return jsonify({"response": wish})
+
 
 @app.route("/")
 def home():
