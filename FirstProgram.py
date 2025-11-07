@@ -48,7 +48,7 @@ def api_command():
     elif "open amazon" in query:
         return jsonify({"response": "Opening Amazon...", "action": "open_amazon"})
 
-    elif "open chatgpt" in query:
+    elif "open chat GPT" in query:
         return jsonify({"response": "Opening Chatgpt...", "action": "open_chatgpt"})
 
     elif "open spotify" in query:
