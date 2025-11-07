@@ -64,6 +64,22 @@
     // === CONFIG ===
    const BACKEND_URL = "https://jennie-backend.onrender.com";
 
+   // Fetch and speak the greeting when page loads
+async function wishUser() {
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/wish`);
+    const data = await res.json();
+    showResponse("Jennie:", data.response);
+    speak(data.response);
+  } catch (err) {
+    console.error("Greeting fetch failed:", err);
+  }
+}
+
+// Call it once when the page loads
+window.onload = wishUser;
+
+
 
     const voiceCircle = document.getElementById('voiceCircle');
     const statusText = document.getElementById('statusText');

@@ -8,6 +8,25 @@ import pytz
 app = Flask(__name__)
 CORS(app)
 
+def shutdown():
+    os.system("shutdown /s /t 0")  # Shutdown immediately
+
+def restart():
+    os.system("shutdown /r /t 0")  # Restart immediately
+
+def lock():
+    os.system("rundll32.exe user32.dll,LockWorkStation")  # Lock the computer
+
+action = input("Enter action (shutdown/restart/lock): ").lower()
+if action == "shutdown":
+    shutdown()
+elif action == "restart":
+    restart()
+elif action == "lock":
+    lock()
+else:
+    print("Invalid action")
+
 @app.route("/api/wish", methods=["GET"])
 def wish_me():
     ist = pytz.timezone("Asia/Kolkata")
