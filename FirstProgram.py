@@ -4,6 +4,7 @@ import os
 import datetime
 import wikipedia
 import pytz
+import json
 
 app = Flask(__name__)
 CORS(app)
@@ -26,6 +27,18 @@ def wish_me():
 @app.route("/")
 def home():
     return "Jennie backend is running!"
+
+def load_memory():
+    if os.path.exists("memory.json"):
+        with open("memory.json", "r") as f:
+            return json.load(f)
+    return {}
+
+def save_memory(memory):
+    with open("memory.json", "w") as f:
+        json.dump(memory, f)
+
+memory = load_memory()
 
 @app.route("/api/command", methods=["POST"])
 def api_command():
@@ -61,6 +74,16 @@ def api_command():
             return jsonify({"response": f"According to Wikipedia: {result}"})
         except Exception:
             return jsonify({"response": "Sorry, I couldn’t find that on Wikipedia."})
+        
+    elif "my name is" in query:
+        name = query.split("my name is")[-1].strip().capitalize()
+        memory["name"] = name
+        save_memory(memory)
+        return jsonify({"response": f"Nice to meet you, {name}!"})
+
+    elif "what is my name" in query:
+        name = memory.get("name", "I don't know your name yet.")
+        return jsonify({"response": name})
 
     else:
         return jsonify({"response": "Sorry, I didn’t understand that command."})
