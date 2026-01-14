@@ -1,0 +1,12 @@
+{
+  "users": {
+    "harshil": {
+      "password": "$2b$12$XAtmpNwnXYiNKZnL5/3vOOu8ROO3/6x9vax7.PDVCXQzTWBXAkivy",
+      "created_at": "2026-01-15T01:09:10.838440"
+    },
+    "user2": {
+      "password": "$2b$12$O0Gv.O1guLZQagU0IeQLJ.ymEc55feDbncxOmmPfczpiIal767fFC",
+      "created_at": "2026-01-15T01:15:27.900460"
+    }
+  }
+}

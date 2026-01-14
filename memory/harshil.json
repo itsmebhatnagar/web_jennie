@@ -1,0 +1,30 @@
+{
+  "facts": {
+    "fact_1": "i like coffee"
+  },
+  "last_queries": [
+    {
+      "query": "what is the time",
+      "time": "2026-01-15T01:12:51.521018"
+    },
+    {
+      "query": "remember i like coffee",
+      "time": "2026-01-15T01:13:47.889317"
+    },
+    {
+      "query": "remind me to drink water in 1 minute",
+      "time": "2026-01-15T01:18:42.141843"
+    },
+    {
+      "query": "what do i like",
+      "time": "2026-01-15T01:31:02.987088"
+    }
+  ],
+  "reminders": [
+    {
+      "text": "drink water",
+      "time": "2026-01-15T01:19:42.142690",
+      "notified": true
+    }
+  ]
+}

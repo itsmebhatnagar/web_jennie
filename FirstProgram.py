@@ -1,177 +1,192 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_jwt_extended import (
+    JWTManager, create_access_token,
+    jwt_required, get_jwt_identity
+)
 import os
 import datetime
 import wikipedia
 import pytz
 import json
+import bcrypt
+import re
 
-app = Flask(__name__)
+# ---------------- APP SETUP ----------------
+
+app = Flask(__name__, static_folder="static")
 CORS(app)
 
-# ---------- TIME GREETING ----------
+app.config["JWT_SECRET_KEY"] = "change-this-secret-key"
+jwt = JWTManager(app)
+
+# ---------------- USER SYSTEM ----------------
+
+USERS_FILE = "users.json"
+MEMORY_DIR = "memory"
+
+if not os.path.exists(MEMORY_DIR):
+    os.makedirs(MEMORY_DIR)
+
+
+def load_users():
+    if os.path.exists(USERS_FILE):
+        with open(USERS_FILE, "r") as f:
+            return json.load(f)
+    return {"users": {}}
+
+
+def save_users(users):
+    with open(USERS_FILE, "w") as f:
+        json.dump(users, f, indent=2)
+
+
+def hash_password(password):
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def check_password(password, hashed):
+    return bcrypt.checkpw(password.encode(), hashed.encode())
+
+
+# ---------------- MEMORY (PER USER) ----------------
+
+def load_user_memory(user_id):
+    path = f"{MEMORY_DIR}/{user_id}.json"
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            return json.load(f)
+    return {
+        "facts": {},
+        "last_queries": [],
+        "reminders": []
+    }
+
+
+def save_user_memory(user_id, memory):
+    with open(f"{MEMORY_DIR}/{user_id}.json", "w") as f:
+        json.dump(memory, f, indent=2)
+
+
+# ---------------- AUTH ROUTES ----------------
+
+@app.route("/api/register", methods=["POST"])
+def register():
+    data = request.get_json(force=True)
+    username = data.get("username")
+    password = data.get("password")
+
+    if not username or not password:
+        return jsonify({"msg": "Missing fields"}), 400
+
+    users = load_users()
+
+    if username in users["users"]:
+        return jsonify({"msg": "User already exists"}), 400
+
+    users["users"][username] = {
+        "password": hash_password(password),
+        "created_at": datetime.datetime.now().isoformat()
+    }
+
+    save_users(users)
+    return jsonify({"msg": "User registered successfully"})
+
+
+@app.route("/api/login", methods=["POST"])
+def login():
+    data = request.get_json(force=True)
+    username = data.get("username")
+    password = data.get("password")
+
+    users = load_users()
+
+    if username not in users["users"]:
+        return jsonify({"msg": "Invalid credentials"}), 401
+
+    if not check_password(password, users["users"][username]["password"]):
+        return jsonify({"msg": "Invalid credentials"}), 401
+
+    token = create_access_token(identity=username)
+    return jsonify({"access_token": token})
+
+
+# ---------------- BASIC ROUTES ----------------
+
+@app.route("/")
+def home():
+    return app.send_static_file("index.html")
+
+
 @app.route("/api/wish", methods=["GET"])
+@jwt_required()
 def wish_me():
     ist = pytz.timezone("Asia/Kolkata")
     hour = datetime.datetime.now(ist).hour
 
     if 0 <= hour < 12:
-        wish = "Good morning! Jennie here. How can I help you today?"
+        wish = "Good morning! Jennie here ☀️"
     elif 12 <= hour < 18:
-        wish = "Good afternoon! Jennie here. How can I assist you?"
+        wish = "Good afternoon! Jennie here 🌤️"
     else:
-        wish = "Good evening! Jennie here. How can I assist you tonight?"
+        wish = "Good evening! Jennie here 🌙"
 
     return jsonify({"response": wish})
 
 
-@app.route("/")
-def home():
-    return "Jennie backend is running!"
+# ---------------- COMMAND HANDLER ----------------
 
-
-# ---------- MEMORY MANAGEMENT ----------
-def load_memory():
-    if os.path.exists("memory.json"):
-        with open("memory.json", "r") as f:
-            return json.load(f)
-    return {"facts": {}, "last_queries": [], "reminders": []}
-
-
-def save_memory(memory):
-    with open("memory.json", "w") as f:
-        json.dump(memory, f, indent=2)
-
-
-memory = load_memory()
-
-
-@app.route("/api/memory", methods=["GET"])
-def get_memory():
-    return jsonify(memory)
-
-
-@app.route("/api/memory", methods=["POST"])
-def set_memory():
-    data = request.get_json(force=True)
-    key = data.get("key")
-    value = data.get("value")
-    if not key:
-        return jsonify({"response": "Invalid request"}), 400
-    memory["facts"][key] = value
-    save_memory(memory)
-    return jsonify({"response": f"Saved {key}."})
-
-
-# ---------- CHAT HISTORY ----------
-@app.route("/api/last_queries", methods=["GET"])
-def last_queries():
-    return jsonify(memory.get("last_queries", []))
-
-
-# ---------- REMINDER SYSTEM ----------
-@app.route("/api/reminders", methods=["POST"])
-def add_reminder():
-    data = request.get_json(force=True)
-    text = data.get("text")
-    time_str = data.get("time")
-    if not text or not time_str:
-        return jsonify({"response": "Invalid reminder data"}), 400
-    try:
-        dt = datetime.datetime.fromisoformat(time_str)
-    except Exception:
-        return jsonify({"response": "Invalid datetime format"}), 400
-    rem = {"text": text, "time": dt.isoformat(), "notified": False}
-    memory.setdefault("reminders", []).append(rem)
-    save_memory(memory)
-    return jsonify({"response": "Reminder saved."})
-
-
-@app.route("/api/reminders/due", methods=["GET"])
-def due_reminders():
-    now = datetime.datetime.now()
-    due = []
-    changed = False
-    for r in memory.get("reminders", []):
-        if not r.get("notified"):
-            dt = datetime.datetime.fromisoformat(r["time"])
-            if dt <= now:
-                due.append(r)
-                r["notified"] = True
-                changed = True
-    if changed:
-        save_memory(memory)
-    return jsonify(due)
-
-
-# ---------- MAIN COMMAND HANDLER ----------
 @app.route("/api/command", methods=["POST"])
+@jwt_required()
 def api_command():
+    user_id = get_jwt_identity()
+    memory = load_user_memory(user_id)
+
     data = request.get_json(force=True)
     query = data.get("query", "").lower().strip()
 
-    # store last 5 queries
-    last = memory.get("last_queries", [])
-    last.append({"query": query, "time": datetime.datetime.now().isoformat()})
-    memory["last_queries"] = last[-5:]
-    save_memory(memory)
+    # save last queries
+    memory["last_queries"].append({
+        "query": query,
+        "time": datetime.datetime.now().isoformat()
+    })
+    memory["last_queries"] = memory["last_queries"][-5:]
 
-    # ----- Predefined commands -----
+    # ---- COMMANDS ----
+
     if "time" in query:
         now = datetime.datetime.now().strftime("%I:%M %p")
-        return jsonify({"response": f"The current time is {now}"})
+        response = f"The current time is {now}"
 
     elif "open youtube" in query:
-        return jsonify({"response": "Opening YouTube...", "action": "open_youtube"})
+        response = "Opening YouTube..."
+        save_user_memory(user_id, memory)
+        return jsonify({"response": response, "action": "open_youtube"})
 
     elif "open google" in query:
-        return jsonify({"response": "Opening Google...", "action": "open_google"})
-
-    elif "open flipkart" in query:
-        return jsonify({"response": "Opening Flipkart...", "action": "open_flipkart"})
-
-    elif "open amazon" in query:
-        return jsonify({"response": "Opening Amazon...", "action": "open_amazon"})
-
-    elif "open helper" in query or "open chatgpt" in query:
-        return jsonify({"response": "Opening ChatGPT...", "action": "open_chatgpt"})
-
-    elif "open spotify" in query:
-        return jsonify({"response": "Opening Spotify...", "action": "open_spotify"})
+        response = "Opening Google..."
+        save_user_memory(user_id, memory)
+        return jsonify({"response": response, "action": "open_google"})
 
     elif "wikipedia" in query:
         topic = query.replace("wikipedia", "").strip()
         try:
             result = wikipedia.summary(topic, sentences=1)
-            return jsonify({"response": f"According to Wikipedia: {result}"})
+            response = f"According to Wikipedia: {result}"
         except Exception:
-            return jsonify({"response": "Sorry, I couldn’t find that on Wikipedia."})
+            response = "Sorry, I couldn’t find that on Wikipedia."
 
-    elif "my name is" in query:
-        name = query.split("my name is")[-1].strip().capitalize()
-        memory["name"] = name
-        save_memory(memory)
-        return jsonify({"response": f"Nice to meet you, {name}!"})
-
-    elif "what is my name" in query:
-        name = memory.get("name", "I don't know your name yet.")
-        return jsonify({"response": name})
-
-    elif query.startswith("remember that ") or query.startswith("remember "):
-        fact = query.replace("remember that", "").replace("remember", "").strip()
-        key = f"fact_{len(memory['facts'])+1}"
+    elif query.startswith("remember"):
+        fact = query.replace("remember", "").strip()
+        key = f"fact_{len(memory['facts']) + 1}"
         memory["facts"][key] = fact
-        save_memory(memory)
-        return jsonify({"response": f"I'll remember: {fact}"})
+        response = f"I'll remember: {fact}"
 
     elif "what do i like" in query or "what did i tell you" in query:
         facts = list(memory["facts"].values())
-        if not facts:
-            return jsonify({"response": "I don't have any saved facts yet."})
-        return jsonify({"response": "You told me: " + "; ".join(facts)})
+        response = "You told me: " + "; ".join(facts) if facts else "You haven't told me anything yet."
 
     elif query.startswith("remind me to"):
-        import re
         m = re.search(r"remind me to (.+) in (\d+)\s*(minute|minutes|hour|hours)", query)
         if m:
             text = m.group(1)
@@ -180,21 +195,56 @@ def api_command():
             seconds = num * 60
             if unit.startswith("hour"):
                 seconds *= 60
-            time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
-            memory.setdefault("reminders", []).append({
-                "text": text, "time": time.isoformat(), "notified": False
-            })
-            save_memory(memory)
-            return jsonify({"response": f"Reminder set for {num} {unit} from now."})
 
-    # ---------- Smart Search Fallback ----------
+            time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+            memory["reminders"].append({
+                "text": text,
+                "time": time.isoformat(),
+                "notified": False
+            })
+            response = f"Reminder set for {num} {unit} from now."
+        else:
+            response = "Sorry, I couldn't understand the reminder."
+
     else:
+        save_user_memory(user_id, memory)
         return jsonify({
-            "response": "I’m not sure about that. I can search the web for you.",
+            "response": "I'm not sure about that. I can search Google for you.",
             "action": "search_google",
             "query": query
         })
 
+    save_user_memory(user_id, memory)
+    return jsonify({"response": response})
+
+
+# ---------------- REMINDERS ----------------
+
+@app.route("/api/reminders/due", methods=["GET"])
+@jwt_required()
+def due_reminders():
+    user_id = get_jwt_identity()
+    memory = load_user_memory(user_id)
+
+    now = datetime.datetime.now()
+    due = []
+    changed = False
+
+    for r in memory["reminders"]:
+        if not r["notified"]:
+            dt = datetime.datetime.fromisoformat(r["time"])
+            if dt <= now:
+                due.append(r)
+                r["notified"] = True
+                changed = True
+
+    if changed:
+        save_user_memory(user_id, memory)
+
+    return jsonify(due)
+
+
+# ---------------- RUN ----------------
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
