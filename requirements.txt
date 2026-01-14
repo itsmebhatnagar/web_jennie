@@ -1,6 +1,6 @@
-Flask
+flask
 flask-cors
+flask-jwt-extended
+werkzeug
 wikipedia
 pytz
-flask-jwt-extended
-bcrypt

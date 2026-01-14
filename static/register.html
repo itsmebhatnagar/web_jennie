@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Register</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{
+  background:linear-gradient(135deg,#667eea,#764ba2);
+  height:100vh;display:flex;align-items:center;justify-content:center;
+  font-family:Segoe UI;color:#fff;
+}
+.card{
+  background:rgba(255,255,255,.1);
+  padding:30px;border-radius:20px;width:300px;text-align:center;
+}
+input,button{
+  width:100%;padding:10px;margin:10px 0;border:none;border-radius:8px;
+}
+a{color:#fff;font-size:14px;}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h2>Register</h2>
+  <input id="username" placeholder="Username">
+  <input id="password" type="password" placeholder="Password">
+  <button onclick="register()">Register</button>
+  <p id="msg"></p>
+  <a href="login.html">Already have an account? Login</a>
+</div>
+
+<script>
+async function register(){
+  const username = document.getElementById("username").value.trim();
+  const password = document.getElementById("password").value.trim();
+  
+  if(!username || !password){
+    msg.innerText = "Enter username and password";
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/register", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({username, password})
+    });
+    
+    const data = await res.json();
+    
+    if(res.ok){
+      msg.innerText = `Registered successfully as ${data.role}`;
+    } else {
+      msg.innerText = data.msg || "Registration failed";
+    }
+  } catch(err){
+    msg.innerText = "Network error";
+  }
+}
+</script>
+
+</body>
+</html>

@@ -1,1 +1,1 @@
-web: python FirstProgram.py
+web: gunicorn FirstProgram:app

@@ -2,141 +2,168 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import (
     JWTManager, create_access_token,
-    jwt_required, get_jwt_identity, get_jwt
+    jwt_required, get_jwt_identity
 )
-import os, json, datetime, bcrypt, pytz, wikipedia, re
+from werkzeug.security import generate_password_hash, check_password_hash
+import os, json, datetime, pytz, wikipedia
 
-app = Flask(__name__, static_folder="static")
+app = Flask(
+    __name__,
+    static_folder="static",
+    static_url_path=""
+)
+
 CORS(app)
 
-app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", "dev-secret")
+app.config["JWT_SECRET_KEY"] = "CHANGE_THIS_SECRET"
 jwt = JWTManager(app)
 
 USERS_FILE = "users.json"
 MEMORY_DIR = "memory"
 os.makedirs(MEMORY_DIR, exist_ok=True)
 
-# ---------- HELPERS ----------
-
+# ---------------- USERS ----------------
 def load_users():
-    if os.path.exists(USERS_FILE):
-        return json.load(open(USERS_FILE))
-    return {"users": {}}
+    if not os.path.exists(USERS_FILE):
+        return {"users": {}}
+    with open(USERS_FILE) as f:
+        return json.load(f)
 
 def save_users(data):
-    json.dump(data, open(USERS_FILE, "w"), indent=2)
+    with open(USERS_FILE, "w") as f:
+        json.dump(data, f, indent=2)
 
-def hash_pw(p): return bcrypt.hashpw(p.encode(), bcrypt.gensalt()).decode()
-def check_pw(p, h): return bcrypt.checkpw(p.encode(), h.encode())
+users_db = load_users()
 
-def load_mem(uid):
-    path = f"{MEMORY_DIR}/{uid}.json"
-    return json.load(open(path)) if os.path.exists(path) else {
-        "facts": {}, "last_queries": [], "reminders": []
-    }
+# ---------------- HOME ----------------
+@app.route("/")
+def home():
+    return app.send_static_file("index.html")
 
-def save_mem(uid, mem):
-    json.dump(mem, open(f"{MEMORY_DIR}/{uid}.json", "w"), indent=2)
-
-# ---------- AUTH ----------
-
+# ---------------- AUTH ----------------
 @app.route("/api/register", methods=["POST"])
 def register():
-    d = request.json
-    users = load_users()
+    data = request.get_json()
+    username = data.get("username","").strip()
+    password = data.get("password","").strip()
 
-    role = "master_admin" if not users["users"] else "user"
+    if not username or not password:
+        return jsonify({"msg":"Username & password required"}),400
 
-    users["users"][d["username"]] = {
-        "password": hash_pw(d["password"]),
-        "role": role,
-        "created": datetime.datetime.now().isoformat()
+    if username in users_db["users"]:
+        return jsonify({"msg":"User already exists"}),400
+
+    role = "master_admin" if not users_db["users"] else "user"
+
+    users_db["users"][username] = {
+        "password": generate_password_hash(password),
+        "role": role
     }
-    save_users(users)
-    return jsonify({"msg": f"Registered as {role}"})
 
+    save_users(users_db)
+
+    with open(f"{MEMORY_DIR}/{username}.json","w") as f:
+        json.dump({"facts":{}, "last_queries":[], "reminders":[]}, f, indent=2)
+
+    return jsonify({"msg":"Registered", "role":role})
 
 @app.route("/api/login", methods=["POST"])
 def login():
-    d = request.json
-    users = load_users()["users"]
+    data = request.get_json()
+    username = data.get("username","").strip()
+    password = data.get("password","").strip()
 
-    if d["username"] not in users:
-        return jsonify({"msg": "Invalid"}), 401
+    user = users_db["users"].get(username)
+    if not user or not check_password_hash(user["password"], password):
+        return jsonify({"msg":"Invalid credentials"}),401
 
-    u = users[d["username"]]
-    if not check_pw(d["password"], u["password"]):
-        return jsonify({"msg": "Invalid"}), 401
+    token = create_access_token(identity=username)
+    return jsonify({"token":token, "role":user["role"]})
 
-    token = create_access_token(
-        identity=d["username"],
-        additional_claims={"role": u["role"]}
-    )
-    return jsonify({"access_token": token, "role": u["role"]})
-
-# ---------- ADMIN APIs ----------
-
-@app.route("/api/admin/users", methods=["GET"])
-@jwt_required()
-def list_users():
-    role = get_jwt()["role"]
-    if role not in ["admin", "master_admin"]:
-        return jsonify({"msg": "Forbidden"}), 403
-    return jsonify(load_users()["users"])
-
-@app.route("/api/admin/make-admin", methods=["POST"])
-@jwt_required()
-def make_admin():
-    claims = get_jwt()
-    if claims["role"] != "master_admin":
-        return jsonify({"msg": "Only master admin"}), 403
-
-    username = request.json["username"]
-    users = load_users()
-    if username in users["users"]:
-        users["users"][username]["role"] = "admin"
-        save_users(users)
-        return jsonify({"msg": f"{username} is admin"})
-    return jsonify({"msg": "User not found"}), 404
-
-# ---------- ASSISTANT ----------
-
+# ---------------- WISH ----------------
 @app.route("/api/wish")
-@jwt_required()
 def wish():
-    h = datetime.datetime.now(pytz.timezone("Asia/Kolkata")).hour
-    return jsonify({"response":
-        "Good morning" if h < 12 else "Good evening"
-    })
+    ist = pytz.timezone("Asia/Kolkata")
+    hour = datetime.datetime.now(ist).hour
+    if hour < 12:
+        msg = "Good morning! Jennie here."
+    elif hour < 18:
+        msg = "Good afternoon! Jennie here."
+    else:
+        msg = "Good evening! Jennie here."
+    return jsonify({"response":msg})
 
+# ---------------- MEMORY ----------------
+def load_memory(user):
+    with open(f"{MEMORY_DIR}/{user}.json") as f:
+        return json.load(f)
+
+def save_memory(user, data):
+    with open(f"{MEMORY_DIR}/{user}.json","w") as f:
+        json.dump(data, f, indent=2)
+
+# ---------------- COMMAND ----------------
 @app.route("/api/command", methods=["POST"])
 @jwt_required()
 def command():
     user = get_jwt_identity()
-    mem = load_mem(user)
-    q = request.json["query"].lower()
+    mem = load_memory(user)
+    query = request.json.get("query","").lower().strip()
 
-    mem["last_queries"].append(q)
+    mem["last_queries"].append({
+        "query":query,
+        "time":datetime.datetime.utcnow().isoformat()
+    })
     mem["last_queries"] = mem["last_queries"][-5:]
+    save_memory(user, mem)
 
-    if "time" in q:
-        r = datetime.datetime.now().strftime("%I:%M %p")
-    elif q.startswith("remember"):
-        mem["facts"][f"fact{len(mem['facts'])+1}"] = q
-        r = "Saved"
-    else:
-        r = "I can search this for you"
+    if "time" in query:
+        return jsonify({"response":datetime.datetime.now().strftime("%I:%M %p")})
 
-    save_mem(user, mem)
-    return jsonify({"response": r})
+    if "open youtube" in query:
+        return jsonify({"response":"Opening YouTube","action":"open_youtube"})
 
-@app.route("/api/reminders/due")
+    if "open google" in query:
+        return jsonify({"response":"Opening Google","action":"open_google"})
+
+    if "open flipkart" in query:
+        return jsonify({"response":"Opening Flipkart","action":"open_flipkart"})
+
+    if "open amazon" in query:
+        return jsonify({"response":"Opening Amazon","action":"open_amazon"})
+
+    if "open spotify" in query:
+        return jsonify({"response":"Opening Spotify","action":"open_spotify"})
+
+    if "wikipedia" in query:
+        topic = query.replace("wikipedia","").strip()
+        try:
+            return jsonify({"response": wikipedia.summary(topic, sentences=1)})
+        except:
+            return jsonify({"response":"No result found"})
+
+    return jsonify({
+        "response":"I’m not sure about that.",
+        "action":"search_google",
+        "query":query
+    })
+
+# ---------------- ADMIN ----------------
+@app.route("/api/make-admin", methods=["POST"])
 @jwt_required()
-def reminders():
-    mem = load_mem(get_jwt_identity())
-    return jsonify(mem["reminders"])
+def make_admin():
+    current = get_jwt_identity()
+    if users_db["users"][current]["role"] != "master_admin":
+        return jsonify({"msg":"Unauthorized"}),403
 
-# ---------- RUN ----------
+    username = request.json.get("username")
+    if username not in users_db["users"]:
+        return jsonify({"msg":"User not found"}),404
 
+    users_db["users"][username]["role"] = "admin"
+    save_users(users_db)
+    return jsonify({"msg":f"{username} is now admin"})
+
+# ---------------- RUN ----------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    app.run(host="0.0.0.0", port=5000)

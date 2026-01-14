@@ -1,87 +1,239 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<title>Jennie</title>
+<meta charset="UTF-8">
+<title>Jennie – Voice Assistant</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
-body{font-family:sans-serif;background:#111;color:#fff}
-.hidden{display:none}
-.card{background:#222;padding:20px;border-radius:10px;width:300px;margin:auto}
-button{margin-top:10px;width:100%}
-#commandsBtn{position:fixed;bottom:20px;right:20px}
-#commands{position:fixed;bottom:70px;right:20px;background:#333;padding:10px;border-radius:10px}
+body {
+  font-family: "Segoe UI", sans-serif;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  height: 100vh;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.assistant-container {
+  text-align: center;
+  background: rgba(255,255,255,0.05);
+  padding: 40px;
+  border-radius: 25px;
+  width: 320px;
+  backdrop-filter: blur(10px);
+}
+
+.voice-circle {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: linear-gradient(135deg,#667eea,#764ba2);
+  margin:auto;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.voice-circle svg {
+  width:60px;
+  height:60px;
+  fill:white;
+}
+
+#commandsBtn,#adminBtn{
+  position:fixed;
+  right:20px;
+  padding:10px 15px;
+  border:none;
+  border-radius:12px;
+  background:rgba(102,126,234,0.7);
+  color:#fff;
+  cursor:pointer;
+}
+
+#commandsBtn{bottom:20px;}
+#adminBtn{bottom:65px;display:none;}
+
+.modal{
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.6);
+  align-items:center;
+  justify-content:center;
+}
+
+.modal-content{
+  background:#111;
+  padding:20px;
+  border-radius:15px;
+  width:300px;
+}
 </style>
 </head>
+
 <body>
 
-<div id="login" class="card">
-<input id="lu" placeholder="username">
-<input id="lp" type="password" placeholder="password">
-<button onclick="login()">Login</button>
-<button onclick="register()">Register</button>
+<div class="assistant-container">
+  <div class="voice-circle" onclick="startListening()">
+    <svg viewBox="0 0 24 24">
+      <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3z"/>
+      <path d="M19 11a1 1 0 10-2 0 5 5 0 01-10 0 1 1 0 10-2 0 7 7 0 006 6.92V21h2v-3.08A7 7 0 0019 11z"/>
+    </svg>
+  </div>
+  <p id="statusText">Tap to Start Listening</p>
+  <div id="response"></div>
 </div>
 
-<div id="chat" class="hidden card">
-<div id="role"></div>
-<input id="q" placeholder="Say something">
-<button onclick="send()">Send</button>
-<div id="out"></div>
+<button id="adminBtn">Admin</button>
+<button id="commandsBtn">Commands</button>
 
-<div id="admin" class="hidden">
-<h4>Admin Panel</h4>
-<input id="makeAdminUser" placeholder="username">
-<button onclick="makeAdmin()">Make Admin</button>
-</div>
+<div class="modal" id="commandsModal">
+  <div class="modal-content">
+    <h3>Jennie Commands</h3>
+    <p onclick="runCmd('time')">time</p>
+    <p onclick="runCmd('open youtube')">open youtube</p>
+    <p onclick="runCmd('open google')">open google</p>
+    <p onclick="runCmd('open flipkart')">open flipkart</p>
+    <p onclick="runCmd('open amazon')">open amazon</p>
+    <p onclick="runCmd('open spotify')">open spotify</p>
+    <p onclick="runCmd('wikipedia india')">wikipedia &lt;topic&gt;</p>
+    <button onclick="closeModal()">Close</button>
+  </div>
 </div>
 
-<button id="commandsBtn" onclick="toggle()">Commands</button>
-<div id="commands" class="hidden">
-<div>what is the time</div>
-<div>remember something</div>
-<div>open google</div>
-<div>admin commands*</div>
+<div class="modal" id="adminModal">
+  <div class="modal-content">
+    <h3>Admin Panel</h3>
+    <input id="adminUsername" placeholder="Username to make admin" style="width:100%;padding:8px;margin:10px 0;">
+    <button onclick="makeAdmin()">Make Admin</button>
+    <button onclick="closeAdminModal()" style="margin-left:10px;">Close</button>
+    <p id="adminMsg"></p>
+  </div>
 </div>
 
 <script>
-const API="https://web-jennie.onrender.com"
-let token="", role=""
+/* LOGIN CHECK */
+const isLoggedIn = localStorage.getItem("isLoggedIn");
+const username = localStorage.getItem("username");
 
-async function login(){
-const r=await fetch(API+"/api/login",{method:"POST",headers:{'Content-Type':'application/json'},
-body:JSON.stringify({username:lu.value,password:lp.value})})
-const d=await r.json()
-token=d.access_token; role=d.role
-loginUI()
+console.log("Login check - isLoggedIn:", isLoggedIn, "username:", username);
+
+if(isLoggedIn!=="true" || !username){
+  console.log("Redirecting to login...");
+  window.location.replace("login.html");
 }
 
-async function register(){
-await fetch(API+"/api/register",{method:"POST",headers:{'Content-Type':'application/json'},
-body:JSON.stringify({username:lu.value,password:lp.value})})
-alert("Registered")
+/* ADMIN BUTTON */
+const adminBtn = document.getElementById("adminBtn");
+const role = localStorage.getItem("role");
+
+console.log("Full localStorage:", {
+  isLoggedIn: localStorage.getItem("isLoggedIn"),
+  username: localStorage.getItem("username"),
+  role: localStorage.getItem("role"),
+  token: localStorage.getItem("token")
+});
+
+console.log("Admin button element:", adminBtn);
+console.log("User role:", role);
+
+if(adminBtn && (role==="admin"||role==="master_admin")){
+  adminBtn.style.display="block";
+  console.log("Admin button set to visible");
+} else {
+  console.log("Admin button not shown - element:", !!adminBtn, "role:", role);
 }
 
-function loginUI(){
-login.classList.add("hidden")
-chat.classList.remove("hidden")
-roleDiv=document.getElementById("role")
-roleDiv.innerText="Role: "+role
-if(role==="master_admin") admin.classList.remove("hidden")
-}
+commandsBtn.onclick=()=>commandsModal.style.display="flex";
+adminBtn.onclick=()=>adminModal.style.display="flex";
 
-async function send(){
-const r=await fetch(API+"/api/command",{method:"POST",
-headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
-body:JSON.stringify({query:q.value})})
-out.innerText=(await r.json()).response
-}
+function closeModal(){commandsModal.style.display="none";}
+function closeAdminModal(){adminModal.style.display="none";}
 
+/* ADMIN FUNCTIONS */
 async function makeAdmin(){
-await fetch(API+"/api/admin/make-admin",{method:"POST",
-headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
-body:JSON.stringify({username:makeAdminUser.value})})
-alert("Updated")
+  const targetUsername = document.getElementById("adminUsername").value.trim();
+  const token = localStorage.getItem("token");
+  const adminMsg = document.getElementById("adminMsg");
+  
+  if(!targetUsername){
+    adminMsg.innerText = "Enter username";
+    return;
+  }
+  
+  try {
+    const res = await fetch("/api/make-admin", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({username: targetUsername})
+    });
+    
+    const data = await res.json();
+    
+    if(res.ok){
+      adminMsg.innerText = data.msg;
+      document.getElementById("adminUsername").value = "";
+    } else {
+      adminMsg.innerText = data.msg || "Failed to make admin";
+    }
+  } catch(err){
+    adminMsg.innerText = "Network error";
+  }
 }
 
-function toggle(){commands.classList.toggle("hidden")}
+/* VOICE */
+function startListening(){
+  statusText.innerText="Listening...";
+}
+
+/* COMMAND EXEC */
+async function runCmd(cmd){
+  closeModal();
+  const token = localStorage.getItem("token");
+  const res = await fetch("/api/command",{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "Authorization": `Bearer ${token}`
+    },
+    body:JSON.stringify({query:cmd})
+  });
+  const data = await res.json();
+  response.innerText=data.response;
+  
+  // Execute actions if present
+  if(data.action){
+    switch(data.action){
+      case "open_youtube":
+        window.open("https://www.youtube.com","_blank");
+        break;
+      case "open_google":
+        window.open("https://www.google.com","_blank");
+        break;
+      case "open_flipkart":
+        window.open("https://www.flipkart.com","_blank");
+        break;
+      case "open_amazon":
+        window.open("https://www.amazon.com","_blank");
+        break;
+      case "open_spotify":
+        window.open("https://www.spotify.com","_blank");
+        break;
+      case "search_google":
+        window.open(`https://www.google.com/search?q=${encodeURIComponent(data.query)}`,"_blank");
+        break;
+    }
+  }
+}
 </script>
+
 </body>
 </html>
