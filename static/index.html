@@ -1,261 +1,87 @@
 <!doctype html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Jennie - Voice Assistant</title>
-
-  <style>
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: #fff;
-      height: 100vh;
-      margin: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .hidden { display: none; }
-
-    .card {
-      background: rgba(255,255,255,0.1);
-      backdrop-filter: blur(10px);
-      border-radius: 25px;
-      padding: 35px;
-      width: 320px;
-      text-align: center;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-    }
-
-    input {
-      width: 100%;
-      padding: 10px;
-      margin: 8px 0;
-      border-radius: 8px;
-      border: none;
-      outline: none;
-    }
-
-    button {
-      padding: 10px 16px;
-      border-radius: 10px;
-      border: none;
-      cursor: pointer;
-      background: linear-gradient(135deg, #667eea, #764ba2);
-      color: #fff;
-      margin-top: 10px;
-    }
-
-    /* ===== Voice UI ===== */
-
-    .voice-circle {
-      width: 140px;
-      height: 140px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #667eea, #764ba2);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 25px;
-      cursor: pointer;
-    }
-
-    .mic-icon { width: 60px; fill: white; }
-
-    .status-text { font-size: 20px; margin-bottom: 10px; }
-    .transcript-text { opacity: 0.8; }
-
-    .response-card {
-      display: none;
-      background: rgba(255,255,255,0.2);
-      padding: 15px;
-      border-radius: 15px;
-      margin-top: 15px;
-    }
-    .response-card.show { display: block; }
-
-    .top-bar {
-      position: fixed;
-      top: 15px;
-      right: 15px;
-    }
-  </style>
+<title>Jennie</title>
+<style>
+body{font-family:sans-serif;background:#111;color:#fff}
+.hidden{display:none}
+.card{background:#222;padding:20px;border-radius:10px;width:300px;margin:auto}
+button{margin-top:10px;width:100%}
+#commandsBtn{position:fixed;bottom:20px;right:20px}
+#commands{position:fixed;bottom:70px;right:20px;background:#333;padding:10px;border-radius:10px}
+</style>
 </head>
-
 <body>
 
-<!-- ===== LOGIN ===== -->
-<div id="loginScreen" class="card hidden">
-  <h2>Login</h2>
-  <input id="loginUser" placeholder="Username">
-  <input id="loginPass" type="password" placeholder="Password">
-  <button onclick="login()">Login</button>
-  <p><a href="#" onclick="showRegister()">Register</a></p>
+<div id="login" class="card">
+<input id="lu" placeholder="username">
+<input id="lp" type="password" placeholder="password">
+<button onclick="login()">Login</button>
+<button onclick="register()">Register</button>
 </div>
 
-<!-- ===== REGISTER ===== -->
-<div id="registerScreen" class="card hidden">
-  <h2>Register</h2>
-  <input id="regUser" placeholder="Username">
-  <input id="regPass" type="password" placeholder="Password">
-  <button onclick="register()">Create Account</button>
-  <p><a href="#" onclick="showLogin()">Back to Login</a></p>
+<div id="chat" class="hidden card">
+<div id="role"></div>
+<input id="q" placeholder="Say something">
+<button onclick="send()">Send</button>
+<div id="out"></div>
+
+<div id="admin" class="hidden">
+<h4>Admin Panel</h4>
+<input id="makeAdminUser" placeholder="username">
+<button onclick="makeAdmin()">Make Admin</button>
+</div>
 </div>
 
-<!-- ===== CHAT UI ===== -->
-<div id="chatScreen" class="card hidden">
-  <div class="top-bar">
-    <button onclick="logout()">Logout</button>
-  </div>
-
-  <div class="voice-circle" id="voiceCircle">
-    <svg class="mic-icon" viewBox="0 0 24 24">
-      <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-      <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-    </svg>
-  </div>
-
-  <div class="status-text" id="statusText">Tap to Start Listening</div>
-  <div class="transcript-text" id="transcriptText"></div>
-
-  <div class="response-card" id="responseCard">
-    <div id="responseContent"></div>
-  </div>
+<button id="commandsBtn" onclick="toggle()">Commands</button>
+<div id="commands" class="hidden">
+<div>what is the time</div>
+<div>remember something</div>
+<div>open google</div>
+<div>admin commands*</div>
 </div>
 
 <script>
-const BACKEND = "https://web-jennie.onrender.com";
-const tokenKey = "jennie_token";
+const API="https://web-jennie.onrender.com"
+let token="", role=""
 
-const loginScreen = document.getElementById("loginScreen");
-const registerScreen = document.getElementById("registerScreen");
-const chatScreen = document.getElementById("chatScreen");
-
-function showLogin() {
-  loginScreen.classList.remove("hidden");
-  registerScreen.classList.add("hidden");
-  chatScreen.classList.add("hidden");
+async function login(){
+const r=await fetch(API+"/api/login",{method:"POST",headers:{'Content-Type':'application/json'},
+body:JSON.stringify({username:lu.value,password:lp.value})})
+const d=await r.json()
+token=d.access_token; role=d.role
+loginUI()
 }
 
-function showRegister() {
-  registerScreen.classList.remove("hidden");
-  loginScreen.classList.add("hidden");
+async function register(){
+await fetch(API+"/api/register",{method:"POST",headers:{'Content-Type':'application/json'},
+body:JSON.stringify({username:lu.value,password:lp.value})})
+alert("Registered")
 }
 
-function showChat() {
-  chatScreen.classList.remove("hidden");
-  loginScreen.classList.add("hidden");
-  registerScreen.classList.add("hidden");
-  wishUser();
+function loginUI(){
+login.classList.add("hidden")
+chat.classList.remove("hidden")
+roleDiv=document.getElementById("role")
+roleDiv.innerText="Role: "+role
+if(role==="master_admin") admin.classList.remove("hidden")
 }
 
-/* ===== AUTH ===== */
-
-async function login() {
-  const username = loginUser.value;
-  const password = loginPass.value;
-
-  const res = await fetch(`${BACKEND}/api/login`, {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({ username, password })
-  });
-
-  const data = await res.json();
-  if (data.access_token) {
-    localStorage.setItem(tokenKey, data.access_token);
-    showChat();
-  } else alert("Login failed");
+async function send(){
+const r=await fetch(API+"/api/command",{method:"POST",
+headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+body:JSON.stringify({query:q.value})})
+out.innerText=(await r.json()).response
 }
 
-async function register() {
-  const username = regUser.value;
-  const password = regPass.value;
-
-  const res = await fetch(`${BACKEND}/api/register`, {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({ username, password })
-  });
-
-  if (res.ok) {
-    alert("Registered! Login now.");
-    showLogin();
-  } else alert("Register failed");
+async function makeAdmin(){
+await fetch(API+"/api/admin/make-admin",{method:"POST",
+headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+body:JSON.stringify({username:makeAdminUser.value})})
+alert("Updated")
 }
 
-function logout() {
-  localStorage.removeItem(tokenKey);
-  showLogin();
-}
-
-/* ===== ASSISTANT ===== */
-
-const voiceCircle = document.getElementById("voiceCircle");
-const statusText = document.getElementById("statusText");
-const transcriptText = document.getElementById("transcriptText");
-const responseCard = document.getElementById("responseCard");
-const responseContent = document.getElementById("responseContent");
-
-function speak(text){
-  const u = new SpeechSynthesisUtterance(text);
-  speechSynthesis.speak(u);
-}
-
-async function wishUser() {
-  const token = localStorage.getItem(tokenKey);
-  const res = await fetch(`${BACKEND}/api/wish`, {
-    headers: { Authorization: "Bearer " + token }
-  });
-  const data = await res.json();
-  responseContent.innerText = data.response;
-  responseCard.classList.add("show");
-  speak(data.response);
-}
-
-async function sendCommand(query) {
-  const token = localStorage.getItem(tokenKey);
-  const res = await fetch(`${BACKEND}/api/command`, {
-    method:"POST",
-    headers:{
-      "Content-Type":"application/json",
-      "Authorization":"Bearer " + token
-    },
-    body: JSON.stringify({ query })
-  });
-  return res.json();
-}
-
-/* Speech Recognition */
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-const recognition = new SpeechRecognition();
-recognition.lang = "en-US";
-
-voiceCircle.onclick = () => {
-  recognition.start();
-  statusText.innerText = "Listening...";
-};
-
-recognition.onresult = async e => {
-  const text = e.results[0][0].transcript;
-  transcriptText.innerText = text;
-
-  const data = await sendCommand(text);
-  responseContent.innerText = data.response;
-  responseCard.classList.add("show");
-  speak(data.response);
-};
-
-recognition.onend = () => statusText.innerText = "Tap to Start Listening";
-
-/* ===== INIT ===== */
-window.onload = () => {
-  const token = localStorage.getItem(tokenKey);
-  token ? showChat() : showLogin();
-};
+function toggle(){commands.classList.toggle("hidden")}
 </script>
-
 </body>
 </html>
