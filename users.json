@@ -1,9 +1,0 @@
-{
-  "users": {
-    "Harshil": {
-      "password": "scrypt:32768:8:1$cFogOSSt2ude8kfa$a6b08446e7fcccdb85a503c2fb1939e1ee27fad0bbb0cf48a2283c3b61740a75833605cf8ed467f55a897d8207e2cc2b6e90d437f389ef197d8f4547a7b9fb28",
-      "role": "master_admin",
-      "created_at": "2026-01-15T02:54:54.094703"
-    }
-  }
-}

@@ -1,169 +1,169 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from flask_jwt_extended import (
-    JWTManager, create_access_token,
-    jwt_required, get_jwt_identity
-)
-from werkzeug.security import generate_password_hash, check_password_hash
-import os, json, datetime, pytz, wikipedia
+import datetime
+import wikipedia
+import pytz
+import os
+import json
 
-app = Flask(
-    __name__,
-    static_folder="static",
-    static_url_path=""
-)
-
+app = Flask(__name__, static_folder="static")
 CORS(app)
 
-app.config["JWT_SECRET_KEY"] = "CHANGE_THIS_SECRET"
-jwt = JWTManager(app)
-
-USERS_FILE = "users.json"
-MEMORY_DIR = "memory"
-os.makedirs(MEMORY_DIR, exist_ok=True)
-
-# ---------------- USERS ----------------
-def load_users():
-    if not os.path.exists(USERS_FILE):
-        return {"users": {}}
-    with open(USERS_FILE) as f:
-        return json.load(f)
-
-def save_users(data):
-    with open(USERS_FILE, "w") as f:
-        json.dump(data, f, indent=2)
-
-users_db = load_users()
-
-# ---------------- HOME ----------------
+# ---------------- HOME (SERVE FRONTEND) ----------------
 @app.route("/")
 def home():
     return app.send_static_file("index.html")
 
-# ---------------- AUTH ----------------
-@app.route("/api/register", methods=["POST"])
-def register():
-    data = request.get_json()
-    username = data.get("username","").strip()
-    password = data.get("password","").strip()
 
-    if not username or not password:
-        return jsonify({"msg":"Username & password required"}),400
-
-    if username in users_db["users"]:
-        return jsonify({"msg":"User already exists"}),400
-
-    role = "master_admin" if not users_db["users"] else "user"
-
-    users_db["users"][username] = {
-        "password": generate_password_hash(password),
-        "role": role
-    }
-
-    save_users(users_db)
-
-    with open(f"{MEMORY_DIR}/{username}.json","w") as f:
-        json.dump({"facts":{}, "last_queries":[], "reminders":[]}, f, indent=2)
-
-    return jsonify({"msg":"Registered", "role":role})
-
-@app.route("/api/login", methods=["POST"])
-def login():
-    data = request.get_json()
-    username = data.get("username","").strip()
-    password = data.get("password","").strip()
-
-    user = users_db["users"].get(username)
-    if not user or not check_password_hash(user["password"], password):
-        return jsonify({"msg":"Invalid credentials"}),401
-
-    token = create_access_token(identity=username)
-    return jsonify({"token":token, "role":user["role"]})
-
-# ---------------- WISH ----------------
-@app.route("/api/wish")
-def wish():
+# ---------------- TIME GREETING ----------------
+@app.route("/api/wish", methods=["GET"])
+def wish_me():
     ist = pytz.timezone("Asia/Kolkata")
     hour = datetime.datetime.now(ist).hour
-    if hour < 12:
-        msg = "Good morning! Jennie here."
-    elif hour < 18:
-        msg = "Good afternoon! Jennie here."
+
+    if 0 <= hour < 12:
+        wish = "Good morning! Jennie here. How can I help you today?"
+    elif 12 <= hour < 18:
+        wish = "Good afternoon! Jennie here. How can I assist you?"
     else:
-        msg = "Good evening! Jennie here."
-    return jsonify({"response":msg})
+        wish = "Good evening! Jennie here. How can I assist you tonight?"
+
+    return jsonify({"response": wish})
+
 
 # ---------------- MEMORY ----------------
-def load_memory(user):
-    with open(f"{MEMORY_DIR}/{user}.json") as f:
-        return json.load(f)
+def load_memory():
+    if os.path.exists("memory.json"):
+        with open("memory.json", "r") as f:
+            return json.load(f)
+    return {"last_queries": [], "wishes": []}
 
-def save_memory(user, data):
-    with open(f"{MEMORY_DIR}/{user}.json","w") as f:
-        json.dump(data, f, indent=2)
+def save_memory(mem):
+    with open("memory.json", "w") as f:
+        json.dump(mem, f, indent=2)
 
-# ---------------- COMMAND ----------------
+memory = load_memory()
+
+
+# ---------------- COMMAND HANDLER ----------------
 @app.route("/api/command", methods=["POST"])
-@jwt_required()
-def command():
-    user = get_jwt_identity()
-    mem = load_memory(user)
-    query = request.json.get("query","").lower().strip()
+def api_command():
+    data = request.get_json(force=True)
+    query = data.get("query", "").lower().strip()
 
-    mem["last_queries"].append({
-        "query":query,
-        "time":datetime.datetime.utcnow().isoformat()
+    memory["last_queries"].append({
+        "query": query,
+        "time": datetime.datetime.now().isoformat()
     })
-    mem["last_queries"] = mem["last_queries"][-5:]
-    save_memory(user, mem)
+    memory["last_queries"] = memory["last_queries"][-5:]
+    save_memory(memory)
 
     if "time" in query:
-        return jsonify({"response":datetime.datetime.now().strftime("%I:%M %p")})
+        now = datetime.datetime.now().strftime("%I:%M %p")
+        return jsonify({"response": f"The current time is {now}"})
 
-    if "open youtube" in query:
-        return jsonify({"response":"Opening YouTube","action":"open_youtube"})
+    elif "open youtube" in query:
+        return jsonify({"response": "Opening YouTube...", "action": "open_youtube"})
 
-    if "open google" in query:
-        return jsonify({"response":"Opening Google","action":"open_google"})
+    elif "open google" in query:
+        return jsonify({"response": "Opening Google...", "action": "open_google"})
 
-    if "open flipkart" in query:
-        return jsonify({"response":"Opening Flipkart","action":"open_flipkart"})
+    elif "open amazon" in query:
+        return jsonify({"response": "Opening Amazon...", "action": "open_amazon"})
 
-    if "open amazon" in query:
-        return jsonify({"response":"Opening Amazon","action":"open_amazon"})
+    elif "open flipkart" in query:
+        return jsonify({"response": "Opening Flipkart...", "action": "open_flipkart"})
 
-    if "open spotify" in query:
-        return jsonify({"response":"Opening Spotify","action":"open_spotify"})
+    elif "open spotify" in query:
+        return jsonify({"response": "Opening Spotify...", "action": "open_spotify"})
 
-    if "wikipedia" in query:
-        topic = query.replace("wikipedia","").strip()
+    elif "play" in query and "on spotify" in query:
+        # Extract song name from "play [song name] on spotify"
+        import urllib.parse
+        song_name = query.replace("play", "").replace("on spotify", "").strip()
+        if song_name:
+            # Create Spotify URI that can directly play songs (requires Spotify app)
+            # Also provide web fallback
+            encoded_song = urllib.parse.quote(song_name)
+            spotify_uri = f"spotify:search:{encoded_song}"
+            spotify_web_url = f"https://open.spotify.com/search/{encoded_song}"
+            
+            return jsonify({
+                "response": f"Playing {song_name} on Spotify...",
+                "action": "play_spotify",
+                "uri": spotify_uri,
+                "url": spotify_web_url,
+                "song": song_name
+            })
+        else:
+            return jsonify({"response": "Please specify a song name. For example: 'play Shape of You on Spotify'"})
+
+    elif "search" in query and "on youtube" in query:
+        # Extract search term from "search [term] on youtube"
+        import urllib.parse
+        search_term = query.replace("search", "").replace("on youtube", "").strip()
+        if search_term:
+            # Create YouTube search URL
+            encoded_term = urllib.parse.quote(search_term)
+            youtube_url = f"https://www.youtube.com/results?search_query={encoded_term}"
+            
+            return jsonify({
+                "response": f"Searching for {search_term} on YouTube...",
+                "action": "search_youtube",
+                "url": youtube_url,
+                "term": search_term
+            })
+        else:
+            return jsonify({"response": "Please specify what to search. For example: 'search Ed Sheeran on YouTube'"})
+
+    elif "wikipedia" in query:
+        topic = query.replace("wikipedia", "").strip()
         try:
-            return jsonify({"response": wikipedia.summary(topic, sentences=1)})
+            result = wikipedia.summary(topic, sentences=1)
+            return jsonify({"response": result})
         except:
-            return jsonify({"response":"No result found"})
+            return jsonify({"response": "Sorry, I couldn't find that on Wikipedia."})
 
-    return jsonify({
-        "response":"I’m not sure about that.",
-        "action":"search_google",
-        "query":query
-    })
+    elif "wish me" in query or "make a wish" in query:
+        ist = pytz.timezone("Asia/Kolkata")
+        hour = datetime.datetime.now(ist).hour
+        
+        if 0 <= hour < 12:
+            greeting = "Good morning"
+        elif 12 <= hour < 18:
+            greeting = "Good afternoon"
+        else:
+            greeting = "Good night"
+        
+        return jsonify({"response": f"{greeting}! What would you like to wish for today?"})
 
-# ---------------- ADMIN ----------------
-@app.route("/api/make-admin", methods=["POST"])
-@jwt_required()
-def make_admin():
-    current = get_jwt_identity()
-    if users_db["users"][current]["role"] != "master_admin":
-        return jsonify({"msg":"Unauthorized"}),403
+    elif query.startswith("i wish ") or query.startswith("my wish is "):
+        if query.startswith("i wish "):
+            wish = query.replace("i wish ", "").strip()
+        else:
+            wish = query.replace("my wish is ", "").strip()
+        
+        memory["wishes"].append({
+            "wish": wish,
+            "time": datetime.datetime.now().isoformat()
+        })
+        save_memory(memory)
+        return jsonify({"response": f"I've saved your wish: '{wish}'. May all your dreams come true!"})
 
-    username = request.json.get("username")
-    if username not in users_db["users"]:
-        return jsonify({"msg":"User not found"}),404
+    elif "show my wishes" in query or "my wishes" in query:
+        if memory["wishes"]:
+            wishes_list = [f"• {w['wish']}" for w in memory["wishes"]]
+            return jsonify({"response": f"Your wishes:\n" + "\n".join(wishes_list)})
+        else:
+            return jsonify({"response": "You haven't made any wishes yet."})
 
-    users_db["users"][username]["role"] = "admin"
-    save_users(users_db)
-    return jsonify({"msg":f"{username} is now admin"})
+    else:
+        return jsonify({
+            "response": "I'm not sure about that. I can search the web for you.",
+            "action": "search_google",
+            "query": query
+        })
 
-# ---------------- RUN ----------------
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=5000, debug=True)
